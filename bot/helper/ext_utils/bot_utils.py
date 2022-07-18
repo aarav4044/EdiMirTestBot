@@ -299,4 +299,71 @@ def get_content_type(link: str) -> str:
         except:
             content_type = None
     return content_type
+ONE, TWO, THREE, FOUR = range(4)
+def pop_up_stats(update, context):
+    query = update.callback_query
+    stats = bot_sys_stats()
+    query.answer(text=stats, show_alert=True)
+def close(update, context):
+    chat_id = update.effective_chat.id
+    user_id = update.callback_query.from_user.id
 
+    bot = context.bot
+    query = update.callback_query
+    is_admin = bot.get_chat_member(chat_id, user_id).status in [
+        "creator",
+        "administrator",
+    ] or user_id in [OWNER_ID]
+    if is_admin:
+        delete_all_messages()
+    else:
+        query.answer(text="Hahahaha, You Are Not An Admin!", show_alert=True)    
+def delete_all_messages():
+    with status_reply_dict_lock:
+        for message in list(status_reply_dict.values()):
+            try:
+                deleteMessage(bot, message)
+                del status_reply_dict[message.chat.id]
+            except Exception as e:
+                LOGGER.error(str(e))        
+def bot_sys_stats():
+    currentTime = get_readable_time(time() - botStartTime)
+    cpu = cpu_percent(interval=0.5)
+    memory = virtual_memory()
+    mem_p = memory.percent
+    total, used, free, disk = disk_usage('/')
+    total = get_readable_file_size(total)
+    used = get_readable_file_size(used)
+    free = get_readable_file_size(free)
+    sent = get_readable_file_size(net_io_counters().bytes_sent)
+    recv = get_readable_file_size(net_io_counters().bytes_recv)
+    num_active = 0
+    num_upload = 0
+    num_split = 0
+    num_extract = 0
+    num_archi = 0
+    tasks = len(download_dict)
+    for stats in list(download_dict.values()):
+       if stats.status() == MirrorStatus.STATUS_DOWNLOADING:
+                num_active += 1
+       if stats.status() == MirrorStatus.STATUS_UPLOADING:
+                num_upload += 1
+       if stats.status() == MirrorStatus.STATUS_ARCHIVING:
+                num_archi += 1
+       if stats.status() == MirrorStatus.STATUS_EXTRACTING:
+                num_extract += 1
+       if stats.status() == MirrorStatus.STATUS_SPLITTING:
+                num_split += 1
+    stats = f"""
+BOT UPTIME: {currentTime}\n
+CPU : {cpu}% || RAM : {mem_p}%\n
+USED : {used} || FREE :{free}
+SENT : {sent} || RECV : {recv}\n
+ONGOING TASKS:
+DL: {num_active} || UP : {num_upload} || SPLIT : {num_split}
+ZIP : {num_archi} || UNZIP : {num_extract} || TOTAL : {tasks} 
+"""
+    return stats
+dispatcher.add_handler(
+    CallbackQueryHandler(pop_up_stats, pattern="^" + str(FOUR) + "$")
+)
