@@ -6,10 +6,11 @@ from html import escape
 from psutil import disk_usage, cpu_percent, swap_memory, cpu_count, virtual_memory, net_io_counters, boot_time
 from requests import head as rhead
 from urllib.request import urlopen
+from telegram.message import Message
 from telegram import InlineKeyboardMarkup
 from telegram.ext import CallbackQueryHandler
 from bot.helper.telegram_helper.bot_commands import BotCommands
-from bot import download_dict, download_dict_lock, STATUS_LIMIT, botStartTime, DOWNLOAD_DIR, dispatcher
+from bot import bot, download_dict, download_dict_lock, STATUS_LIMIT, botStartTime, DOWNLOAD_DIR, dispatcher, OWNER_ID, status_reply_dict, status_reply_dict_lock, LOGGER
 from bot.helper.telegram_helper.button_build import ButtonMaker
 
 MAGNET_REGEX = r"magnet:\?xt=urn:btih:[a-zA-Z0-9]*"
@@ -300,15 +301,28 @@ def get_content_type(link: str) -> str:
         except:
             content_type = None
     return content_type
+
 ONE, TWO, THREE, FOUR = range(4)
-def pop_up_stats(update, context):
-    query = update.callback_query
-    stats = bot_sys_stats()
-    query.answer(text=stats, show_alert=True)
+
+def deleteMessage(bot, message: Message):
+    try:
+        bot.deleteMessage(chat_id=message.chat.id,
+                           message_id=message.message_id)
+    except Exception as e:
+        LOGGER.error(str(e))
+
+def delete_all_messages():
+    with status_reply_dict_lock:
+        for message in list(status_reply_dict.values()):
+            try:
+                deleteMessage(bot, message)
+                del status_reply_dict[message.chat.id]
+            except Exception as e:
+                LOGGER.error(str(e))
+
 def close(update, context):
     chat_id = update.effective_chat.id
     user_id = update.callback_query.from_user.id
-
     bot = context.bot
     query = update.callback_query
     is_admin = bot.get_chat_member(chat_id, user_id).status in [
@@ -318,15 +332,11 @@ def close(update, context):
     if is_admin:
         delete_all_messages()
     else:
-        query.answer(text="Hahahaha, You Are Not An Admin!", show_alert=True)    
-def delete_all_messages():
-    with status_reply_dict_lock:
-        for message in list(status_reply_dict.values()):
-            try:
-                deleteMessage(bot, message)
-                del status_reply_dict[message.chat.id]
-            except Exception as e:
-                LOGGER.error(str(e))        
+        query.answer(text="Hahahaha, You Are Not An Admin!", show_alert=True)
+def pop_up_stats(update, context):
+    query = update.callback_query
+    stats = bot_sys_stats()
+    query.answer(text=stats, show_alert=True)
 def bot_sys_stats():
     currentTime = get_readable_time(time() - botStartTime)
     cpu = cpu_percent(interval=0.5)
@@ -367,4 +377,7 @@ ZIP : {num_archi} || UNZIP : {num_extract} || TOTAL : {tasks}
     return stats
 dispatcher.add_handler(
     CallbackQueryHandler(pop_up_stats, pattern="^" + str(FOUR) + "$")
+)
+dispatcher.add_handler(
+    CallbackQueryHandler(close, pattern="^" + str(TWO) + "$")
 )
